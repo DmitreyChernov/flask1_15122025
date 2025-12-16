@@ -1,4 +1,5 @@
-from flask import Flask
+from flask import Flask, jsonify
+from typing import Any
 import random
 
 app = Flask(__name__)
@@ -46,7 +47,7 @@ def get_quote(id):
     
     for quote in quotes:
         if quote["id"] == id:
-            return quote
+            return jsonify(quote), 200
     
     return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
 
@@ -60,13 +61,13 @@ def quotes_count():
 # Задание 4 - если правильно понял задачу. Если нет, то готов доработать
 @app.route("/quotes/random")
 def random_quote():
-    return random.choice(quotes)
+    return jsonify(random.choice(quotes))
 
 
 # URL: /quotes
 @app.route("/quotes")
-def get_quotes() -> list[dict[str, any]]:
-    return quotes
+def get_quotes() -> list[dict[str, Any]]:
+    return jsonify(quotes)
 
 
 if __name__ == "__main__":
