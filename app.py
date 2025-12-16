@@ -63,5 +63,11 @@ def random_quote():
     return random.choice(quotes)
 
 
+# URL: /quotes
+@app.route("/quotes")
+def get_quotes() -> list[dict[str, any]]:
+    return quotes
+
+
 if __name__ == "__main__":
     app.run(debug=True)
