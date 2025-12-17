@@ -1,6 +1,9 @@
 from flask import Flask, jsonify
 from typing import Any
 import random
+from flask import request
+
+
 
 app = Flask(__name__)
 
@@ -68,6 +71,15 @@ def random_quote():
 @app.route("/quotes")
 def get_quotes() -> list[dict[str, Any]]:
     return jsonify(quotes)
+
+
+@app.route("/quotes", methods=['POST'])
+def create_quote():
+    data = request.json
+    data['id'] = f"{quotes[-1]['id'] + 1}" # Нужно же добавить в словарик id новой цитаты
+    quotes.append(data)
+    return jsonify(quotes)
+
 
 
 if __name__ == "__main__":
