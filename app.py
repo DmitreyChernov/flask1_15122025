@@ -92,6 +92,22 @@ def del_quote(id):
     return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
 
 
+# Add method PUT
+@app.route("/quotes/<int:id>", methods=['PUT'])
+def edit_quote(id):
+    new_data = request.get_json()
+    if not new_data:
+        return {"error": "Отсутствуют данные"}, 400
+
+    for quote in quotes:
+        if quote["id"] == id:
+            for key, value in new_data.items():
+                if key in quote:
+                    quote[key] = value
+            return jsonify(quote), 200
+
+    return {"error": f"Цитата с id {id} не найдена"}, 404
+
 
 if __name__ == "__main__":
     app.run(debug=True)
