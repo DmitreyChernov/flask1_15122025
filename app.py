@@ -34,6 +34,19 @@ quotes = [
     ]
 
 
+# Добавление рейтинга
+for quote in quotes:
+    if "rating" not in quote:
+        quote["rating"] = 1
+
+
+# Исправления рейтинга на 1 (по умолчанию) при некорректных значениях
+def check_rating(rating):
+    if rating in ['1', '2', '3', '4', '5']:
+        return rating
+    return 1
+
+
 @app.route("/")
 def hello_world():
     return "Hello, World!", 200
@@ -73,11 +86,17 @@ def get_quotes() -> list[dict[str, Any]]:
     return jsonify(quotes), 200
 
 
-# Add method POST
+# Add method POST - функцию оставляю для задачи с рейтингом, но внесу в нее некоторые изменения
 @app.route("/quotes", methods=['POST'])
 def create_quote():
     data = request.json
     data['id'] = f"{quotes[-1]['id'] + 1}" # Нужно же добавить в словарик id новой цитаты
+
+    try:
+        data["rating"] = check_rating(data["rating"])
+    except:
+        data["rating"] = 1
+    
     quotes.append(data)
     return jsonify(quotes), 201
 
@@ -92,7 +111,7 @@ def del_quote(id):
     return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
 
 
-# Add method PUT
+# Add method PUT - функцию оставляю для задачи с рейтингом, но внесу в нее некоторые изменения
 @app.route("/quotes/<int:id>", methods=['PUT'])
 def edit_quote(id):
     new_data = request.get_json()
@@ -103,10 +122,40 @@ def edit_quote(id):
         if quote["id"] == id:
             for key, value in new_data.items():
                 if key in quote:
-                    quote[key] = value
+                    if key == 'rating':           # Для проверки изменений рейтинга
+                        print(key, ' ', value)
+                        quote[key] = check_rating(value)
+                    else:
+                        quote[key] = value
             return jsonify(quote), 200
 
     return {"error": f"Цитата с id {id} не найдена"}, 404
+
+
+# Добавил фильтры. Сначала выбираем по автору, потом по рейтингу. Можно реализовать другим способом
+@app.route("/quotes/filters", methods=["POST"])
+def filter_quotes_by_json():
+    data = request.get_json()
+
+    filtered = quotes
+
+    if "author" in data:
+        author = data["author"]
+        filtered = [q for q in filtered if q.get("author") == author]
+
+    if "rating" in data:
+        try:
+            rating = int(data["rating"])
+            if 1 <= rating <= 5:
+                filtered = [q for q in filtered if q.get("rating") == rating]
+            else:
+                return {"Ошибка": "Рейтинг может быть от 1 до 5"}, 400
+        except:
+            return {"Ошибка": "Рейтинг может быть от 1 до 5"}, 400
+
+    if (filtered) == []:
+        return 'Цитат, соответствующих критериям поиска, не найдено', 201
+    return jsonify(filtered), 201
 
 
 if __name__ == "__main__":
