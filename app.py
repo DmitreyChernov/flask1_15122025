@@ -36,12 +36,12 @@ quotes = [
 
 @app.route("/")
 def hello_world():
-    return "Hello, World!"
+    return "Hello, World!", 200
 
 
 @app.route("/about")
 def about():
-    return about_me
+    return about_me, 200
 
 
 # Задания 1 и 2
@@ -58,27 +58,38 @@ def get_quote(id):
 # Задание 3
 @app.route("/quotes/count")
 def quotes_count():
-    return {"count": len(quotes)}
+    return {"count": len(quotes)}, 200
 
 
 # Задание 4 - если правильно понял задачу. Если нет, то готов доработать
 @app.route("/quotes/random")
 def random_quote():
-    return jsonify(random.choice(quotes))
+    return jsonify(random.choice(quotes)), 200
 
 
 # URL: /quotes
 @app.route("/quotes")
 def get_quotes() -> list[dict[str, Any]]:
-    return jsonify(quotes)
+    return jsonify(quotes), 200
 
 
+# Add method POST
 @app.route("/quotes", methods=['POST'])
 def create_quote():
     data = request.json
     data['id'] = f"{quotes[-1]['id'] + 1}" # Нужно же добавить в словарик id новой цитаты
     quotes.append(data)
-    return jsonify(quotes)
+    return jsonify(quotes), 201
+
+
+# Add method DELETE
+@app.route("/quotes/<int:id>", methods=['DELETE'])
+def del_quote(id):
+    for quote in quotes:
+        if quote["id"] == id:
+            quotes.remove(quote)
+            return jsonify({'message': f'Цитата с id {id} уничтожена'}), 200
+    return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
 
 
 
