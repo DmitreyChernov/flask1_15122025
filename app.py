@@ -49,11 +49,23 @@ def check_rating(rating):
 @app.route("/quotes/<int:id>")
 def get_quote(id):
     
-    for quote in quotes:
-        if quote["id"] == id:
-            return jsonify(quote), 200
+    select_quotes = f"SELECT DISTINCT * from quotes WHERE id={id}" # Использовал DISTINCT для исключения возможных ошибок в bd с повторами
+    connection = sqlite3.connect("store.db")
+    cursor = connection.cursor()
+    cursor.execute(select_quotes)   # get list[tuple]
+    quote_in_db = cursor.fetchone()
+    cursor.close()
+    connection.close()
+    print(quote_in_db)
+    if not quote_in_db:
+        return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
+
+    keys = ["id", "author", "text"]
     
-    return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
+    quote = dict(zip(keys, quote_in_db))
+    print(f'Очередная цитата: {quote}')
+
+    return jsonify(quote), 200
 
 
 # Задание 3
