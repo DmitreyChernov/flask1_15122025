@@ -45,7 +45,7 @@ def check_rating(rating):
 
 
 
-# Задания 1 и 2
+# Поиск цитаты в базе данных по id
 @app.route("/quotes/<int:id>")
 def get_quote(id):
     
@@ -56,14 +56,13 @@ def get_quote(id):
     quote_in_db = cursor.fetchone()
     cursor.close()
     connection.close()
-    print(quote_in_db)
+
     if not quote_in_db:
         return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
 
     keys = ["id", "author", "text"]
     
     quote = dict(zip(keys, quote_in_db))
-    print(f'Очередная цитата: {quote}')
 
     return jsonify(quote), 200
 
@@ -102,19 +101,24 @@ def get_quotes() -> list[dict[str, Any]]:
     return jsonify(quotes), 200
 
 
-# Add method POST - функцию оставляю для задачи с рейтингом, но внесу в нее некоторые изменения
 @app.route("/quotes", methods=['POST'])
 def create_quote():
     data = request.json
-    data['id'] = f"{quotes[-1]['id'] + 1}" # Нужно же добавить в словарик id новой цитаты
-
-    try:
-        data["rating"] = check_rating(data["rating"])
-    except:
-        data["rating"] = 1
+  
+    connection = sqlite3.connect("store.db")
+    cursor = connection.cursor()
     
-    quotes.append(data)
-    return jsonify(quotes), 201
+    try:
+        query = "INSERT INTO quotes (author, text) VALUES (?, ?)"
+        cursor.execute(query, (data['author'], data['text']))
+        connection.commit()
+    except Exception as e:
+        return jsonify({'error': f'ошибка при записи в базу данных {e}'}), 408
+    finally:
+        cursor.close()
+        connection.close()
+
+    return jsonify({'message': 'Цитата добавлена в базу данных'}), 201
 
 
 # Add method DELETE
