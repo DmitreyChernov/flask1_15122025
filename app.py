@@ -2,17 +2,15 @@ from flask import Flask, jsonify
 from typing import Any
 import random
 from flask import request
+from pathlib import Path
 
 
+BASE_DIR = Path(__file__).parent
+path_to_db = BASE_DIR / "store.db" # <- тут путь к БД
 
 app = Flask(__name__)
+app.config('JSON_AS_ASCII') = False
 
-
-about_me = {
-    "name": "Dmitrey",
-    "surname": "Chernov",
-    "email": "psevdotrotheus@gmail.com"
-    }
 
 quotes = [
     {
@@ -46,15 +44,6 @@ def check_rating(rating):
         return rating
     return 1
 
-
-@app.route("/")
-def hello_world():
-    return "Hello, World!", 200
-
-
-@app.route("/about")
-def about():
-    return about_me, 200
 
 
 # Задания 1 и 2
