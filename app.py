@@ -10,39 +10,6 @@ BASE_DIR = Path(__file__).parent
 path_to_db = BASE_DIR / "store.db" # <- тут путь к БД
 
 app = Flask(__name__)
-# app.config('JSON_AS_ASCII') = False
-
-"""
-quotes = [
-    {
-        "id": 1,
-        "author": "Albert Einstein",
-        "text": "Logic will get you from A to B. Imagination will take you everywhere."
-    },
-    {
-        "id": 2,
-        "author": "Mahatma Gandhi",
-        "text": "Be the change that you wish to see in the world."
-    },
-    {
-        "id": 3,
-        "author": "Oscar Wilde",
-        "text": "Be yourself; everyone else is already taken."
-    }
-
-    ]
-# Добавление рейтинга
-for quote in quotes:
-    if "rating" not in quote:
-        quote["rating"] = 1
-"""
-
-# Исправления рейтинга на 1 (по умолчанию) при некорректных значениях
-def check_rating(rating):
-    if rating in ['1', '2', '3', '4', '5']:
-        return rating
-    return 1
-
 
 
 # Поиск цитаты в базе данных по id
@@ -121,61 +88,67 @@ def create_quote():
     return jsonify({'message': 'Цитата добавлена в базу данных'}), 201
 
 
-# Add method DELETE
 @app.route("/quotes/<int:id>", methods=['DELETE'])
 def del_quote(id):
-    for quote in quotes:
-        if quote["id"] == id:
-            quotes.remove(quote)
-            return jsonify({'message': f'Цитата с id {id} уничтожена'}), 200
-    return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
+    connection = sqlite3.connect("store.db")
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute("DELETE FROM quotes WHERE id = ?", (id,))
+        
+        if cursor.rowcount == 0:
+            return jsonify({'error': f'Цитата с id={id} не найдена'}), 404
+        
+        connection.commit()
+        return jsonify({'message': 'Цитата успешно удалена из базы данных'}), 200
+
+    except sqlite3.Error as e:
+        return jsonify({'error': f'Ошибка базы данных: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Внутренняя ошибка сервера: {str(e)}'}), 500
+    
+    finally:
+        cursor.close()
+        connection.close()
 
 
-# Add method PUT - функцию оставляю для задачи с рейтингом, но внесу в нее некоторые изменения
 @app.route("/quotes/<int:id>", methods=['PUT'])
 def edit_quote(id):
     new_data = request.get_json()
     if not new_data:
         return {"error": "Отсутствуют данные"}, 400
 
-    for quote in quotes:
-        if quote["id"] == id:
-            for key, value in new_data.items():
-                if key in quote:
-                    if key == 'rating':           # Для проверки изменений рейтинга
-                        print(key, ' ', value)
-                        quote[key] = check_rating(value)
-                    else:
-                        quote[key] = value
-            return jsonify(quote), 200
+    # Поля, которые разрешается обновлять
+    fields = {"author", "text"}
+    fields_to_update = {k: v for k, v in new_data.items() if k in fields}
 
-    return {"error": f"Цитата с id {id} не найдена"}, 404
+    if not fields_to_update:
+        return {"error": "Нет разрешённых полей"}, 400
 
+    connection = sqlite3.connect("store.db")
+    cursor = connection.cursor()
 
-# Добавил фильтры. Сначала выбираем по автору, потом по рейтингу. Можно реализовать другим способом
-@app.route("/quotes/filters", methods=["POST"])
-def filter_quotes_by_json():
-    data = request.get_json()
+    try:
+        cursor.execute("SELECT * FROM quotes WHERE id = ?", (id,))
+        if cursor.fetchone() is None:
+            return jsonify({"error": f"Цитата с id={id} не найдена"}), 404
 
-    filtered = quotes
+        params = ", ".join([f"{field} = ?" for field in fields_to_update])
+        query = f"UPDATE quotes SET {params} WHERE id = ?"
+        values = list(fields_to_update.values()) + [id]
 
-    if "author" in data:
-        author = data["author"]
-        filtered = [q for q in filtered if q.get("author") == author]
+        cursor.execute(query, values)
+        connection.commit()
 
-    if "rating" in data:
-        try:
-            rating = int(data["rating"])
-            if 1 <= rating <= 5:
-                filtered = [q for q in filtered if q.get("rating") == rating]
-            else:
-                return {"Ошибка": "Рейтинг может быть от 1 до 5"}, 400
-        except:
-            return {"Ошибка": "Рейтинг может быть от 1 до 5"}, 400
+        return jsonify({"message": f"Обновлены поля {fields_to_update} цитаты с id={id}"}), 200
 
-    if (filtered) == []:
-        return 'Цитат, соответствующих критериям поиска, не найдено', 201
-    return jsonify(filtered), 201
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Ошибка базы данных: {e}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Внутренняя ошибка: {e}"}), 500
+    finally:
+        cursor.close()
+        connection.close()
 
 
 if __name__ == "__main__":
