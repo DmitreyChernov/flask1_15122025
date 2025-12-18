@@ -3,15 +3,16 @@ from typing import Any
 import random
 from flask import request
 from pathlib import Path
+import sqlite3
 
 
 BASE_DIR = Path(__file__).parent
 path_to_db = BASE_DIR / "store.db" # <- тут путь к БД
 
 app = Flask(__name__)
-app.config('JSON_AS_ASCII') = False
+# app.config('JSON_AS_ASCII') = False
 
-
+"""
 quotes = [
     {
         "id": 1,
@@ -30,13 +31,11 @@ quotes = [
     }
 
     ]
-
-
 # Добавление рейтинга
 for quote in quotes:
     if "rating" not in quote:
         quote["rating"] = 1
-
+"""
 
 # Исправления рейтинга на 1 (по умолчанию) при некорректных значениях
 def check_rating(rating):
@@ -72,6 +71,22 @@ def random_quote():
 # URL: /quotes
 @app.route("/quotes")
 def get_quotes() -> list[dict[str, Any]]:
+    select_quotes = "SELECT * from quotes"
+    connection = sqlite3.connect("store.db")
+    cursor = connection.cursor()
+    cursor.execute(select_quotes)   # get list[tuple]
+    quotes_db = cursor.fetchall()
+    cursor.close()
+    connection.close()
+
+    keys = ["id", "author", "text"]
+    quotes = []
+
+    for quote_bd in quotes_db:
+        quote = dict(zip(keys, quote_bd))
+        quotes.append(quote)
+        print(f'Очередная цитата: {quote}')
+
     return jsonify(quotes), 200
 
 
