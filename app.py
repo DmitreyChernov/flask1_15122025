@@ -6,10 +6,11 @@ from sqlalchemy import String
 from werkzeug.exceptions import HTTPException
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from pathlib import Path
+from flask_migrate import Migrate
 
 
 BASE_DIR = Path(__file__).parent
-DB_NAME = "main.db"
+DB_NAME = "quotes.db"
 
 
 class Base(DeclarativeBase):
@@ -25,6 +26,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
+migrate = Migrate(app, db)
 
 class Quote(db.Model):
     __tablename__ = 'quotes' 
@@ -185,9 +187,6 @@ def filter_quotes():
 
     return jsonify([q.to_dict() for q in results])
 
-
-with app.app_context():
-    db.create_all()
 
 
 if __name__ == "__main__":
