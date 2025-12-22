@@ -2,9 +2,9 @@ from flask import Flask, jsonify, request, render_template
 from flask_sqlalchemy import SQLAlchemy
 from typing import Any
 import random
-from sqlalchemy import String
+from sqlalchemy import String, ForeignKey
 from werkzeug.exceptions import HTTPException
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from pathlib import Path
 from flask_migrate import Migrate
 
@@ -15,6 +15,12 @@ DB_NAME = "quotes.db"
 
 class Base(DeclarativeBase):
     pass
+
+
+
+from sqlalchemy.orm import relationship
+from sqlalchemy import ForeignKey
+
 
 
 app = Flask(__name__)
@@ -28,13 +34,33 @@ db.init_app(app)
 
 migrate = Migrate(app, db)
 
-class Quote(db.Model):
-    __tablename__ = 'quotes' 
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    author: Mapped[str] = mapped_column(String(100), nullable=False)  
-    text: Mapped[str] = mapped_column(String(500), nullable=False)  
+
+class AuthorModel(db.Model):
+    __tablename__ = 'authors'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[int] = mapped_column(String(32), index= True, unique=True)
+    quotes: Mapped[list['QuoteModel']] = relationship( back_populates='author', lazy='dynamic')
+
+    def __init__(self, name):
+       self.name = name
+
+    def to_dict(self):
+        return {'name': self.name}
+
+
+class QuoteModel(db.Model):
+    __tablename__ = 'quotes'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey('authors.id'))
+    author: Mapped['AuthorModel'] = relationship(back_populates='quotes')
+    text: Mapped[str] = mapped_column(String(255))
     rating: Mapped[int] = mapped_column(nullable=False, default=1)
+
+    def __init__(self, author, text):
+        self.author = author
+        self.text  = text
 
     def to_dict(self):
         return {
