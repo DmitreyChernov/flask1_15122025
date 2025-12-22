@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Сборник цитат</title>
+    <style>
+        body { font-family: sans-serif; max-width: 700px; margin: 20px auto; padding: 0 15px; background: #9ecda9;}
+        h1, h2 { color: #333; }
+        form { background: #4ec465; padding: 15px; margin: 20px 0; border-radius: 6px; }
+        label { display: block; margin: 8px 0 4px; }
+        input, textarea, select { width: 100%; padding: 6px; margin-bottom: 10px; box-sizing: border-box; }
+        button { padding: 8px 15px; margin: 5px 10px 10px 0; }
+        .result { margin-top: 20px; padding: 12px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        pre { background: #eeeeee; padding: 10px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>Сборник цитат</h1>
+
+    <!-- Сообщения -->
+    <div id="message"></div>
+
+    <!-- Добавление цитаты -->
+    <form id="add-form">
+        <h2>Добавить цитату</h2>
+        <label>Автор: <input type="text" name="author" required></label>
+        <label>Текст: <textarea name="text" rows="3" required></textarea></label>
+        <label>Рейтинг:
+            <select name="rating">
+                <option value="1">1 ★</option>
+                <option value="2">2 ★★</option>
+                <option value="3">3 ★★★</option>
+                <option value="4">4 ★★★★</option>
+                <option value="5">5 ★★★★★</option>
+                <option value="1">не определен</option>
+            </select>
+        </label>
+        <button type="submit">Добавить</button>
+    </form>
+
+    <!-- Удаление цитаты -->
+    <form id="delete-form">
+        <h2>Удалить цитату</h2>
+        <label>ID цитаты: <input type="number" name="id" min="1" required></label>
+        <button type="submit">Удалить</button>
+    </form>
+
+    <!-- Редактирование цитаты -->
+    <form id="edit-form">
+        <h2>Редактировать цитату</h2>
+        <label>ID цитаты: <input type="number" name="id" min="1" required></label>
+        <label>Новый автор: <input type="text" name="author"></label>
+        <label>Новый текст: <textarea name="text" rows="2"></textarea></label>
+        <label>Новый рейтинг:
+            <select name="rating">
+                <option value="">— не менять —</option>
+                <option value="1">1 ★</option>
+                <option value="2">2 ★★</option>
+                <option value="3">3 ★★★</option>
+                <option value="4">4 ★★★★</option>
+                <option value="5">5 ★★★★★</option>
+            </select>
+        </label>
+        <button type="submit">Обновить</button>
+    </form>
+
+    <!-- Поиск по фильтрам -->
+    <form id="filter-form">
+        <h2>Поиск по фильтрам</h2>
+        <label>ID: <input type="number" name="id" min="1"></label>
+        <label>Автор: <input type="text" name="author"></label>
+        <label>Текст: <input type="text" name="text"></label>
+        <label>Рейтинг:
+            <select name="rating">
+                <option value="">— любой —</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+            </select>
+        </label>
+        <button type="submit">Найти</button>
+    </form>
+
+
+    <!-- Результат поиска -->
+    <div id="filter-result"></div>
+    
+
+    <script>
+        // Вывод сообщения
+        function showMessage(text, isError = false) {
+            const el = document.getElementById('message');
+            el.className = isError ? 'result error' : 'result success';
+            el.innerHTML = `<strong>${isError ? 'Ошибка' : 'Готово'}:</strong> ${text}`;
+        }
+
+        // Отправка JSON POST/PUT/DELETE
+        async function sendJson(method, url, data) {
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    showMessage(`Успех: ${JSON.stringify(result)}`);
+                } else {
+                    showMessage(`Статус ${res.status}: ${result.error || 'Неизвестная ошибка'}`, true);
+                }
+                return res.ok;
+            } catch (e) {
+                showMessage('Не удалось подключиться к серверу', true);
+                return false;
+            }
+        }
+
+        // Добавление
+        document.getElementById('add-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            await sendJson('POST', '/quotes', {
+                author: fd.get('author'),
+                text: fd.get('text'),
+                rating: parseInt(fd.get('rating'))
+            });
+            e.target.reset();
+        };
+
+        // Удаление
+        document.getElementById('delete-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const id = parseInt(new FormData(e.target).get('id'));
+            if (id && confirm(`Удалить цитату №${id}?`)) {
+                await sendJson('DELETE', `/quotes/${id}`, {});
+            }
+        };
+
+        // Редактирование
+        document.getElementById('edit-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const id = parseInt(fd.get('id'));
+            if (!id) return showMessage('Укажите ID', true);
+
+            const data = {};
+            if (fd.get('author')) data.author = fd.get('author');
+            if (fd.get('text')) data.text = fd.get('text');
+            if (fd.get('rating')) data.rating = parseInt(fd.get('rating'));
+
+            if (Object.keys(data).length === 0) {
+                showMessage('Укажите хотя бы одно поле для обновления', true);
+                return;
+            }
+
+            await sendJson('PUT', `/quotes/${id}`, data);
+        };
+
+        // Поиск
+        document.getElementById('filter-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const params = new URLSearchParams();
+            for (let [key, value] of fd.entries()) {
+                if (value !== "" && value !== null) {
+                    params.append(key, value);
+                }
+            }
+            const url = `/quotes/filters?${params.toString()}`;
+            try {
+                const res = await fetch(url);
+                const result = await res.json();
+                const el = document.getElementById('filter-result');
+                if (res.ok) {
+                    el.className = 'result success';
+                    el.innerHTML = `<h3>Результат поиска:</h3><pre>${JSON.stringify(result, null, 2)}</pre>`;
+                } else {
+                    el.className = 'result error';
+                    el.innerHTML = `<strong>Ошибка:</strong> ${result.error || 'Неизвестно'}`;
+                }
+            } catch (e) {
+                document.getElementById('filter-result').className = 'result error';
+                document.getElementById('filter-result').textContent = 'Не удалось выполнить поиск';
+            }
+        };
+
+    </script>
+</body>
+</html>

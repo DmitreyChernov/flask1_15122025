@@ -1,241 +1,194 @@
-from flask import Flask, jsonify, request, g
+from flask import Flask, jsonify, request, render_template
+from flask_sqlalchemy import SQLAlchemy
 from typing import Any
 import random
+from sqlalchemy import String
+from werkzeug.exceptions import HTTPException
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from pathlib import Path
-import sqlite3
 
 
 BASE_DIR = Path(__file__).parent
-path_to_db = BASE_DIR / "store.db" # <- тут путь к БД
+DB_NAME = "main.db"
+
+
+class Base(DeclarativeBase):
+    pass
+
 
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / DB_NAME}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 
-def get_db():
-    db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = sqlite3.connect(path_to_db)
-    return db
+db = SQLAlchemy(model_class=Base)
+db.init_app(app)
 
 
-@app.teardown_appcontext
-def close_connection(exeption):
-    db = getattr(g, '_database', None)
-    if db is not None:
-        db.close
+class Quote(db.Model):
+    __tablename__ = 'quotes' 
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    author: Mapped[str] = mapped_column(String(100), nullable=False)  
+    text: Mapped[str] = mapped_column(String(500), nullable=False)  
+    rating: Mapped[int] = mapped_column(nullable=False, default=1)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "author": self.author,
+            "text": self.text,
+            "rating": self.rating
+        }
 
 
-# Проверяем правильность рейтинга при новой записи или при изменении. 
-# В засисимости от этого либо оставляем текущий рейтинг, либо вносим единицу 
-# в качестве default значения.
 def check_rating(rating_value: Any, is_new: bool) -> int | None:
     try:
         rating = int(rating_value)
         if 1 <= rating <= 5:
             return rating
     except:
-        pass
-    if is_new:
-        return 1
-    else:
         return None
-    
 
-# Поиск цитаты в базе данных по id
-@app.route("/quotes/<int:id>")
+
+@app.errorhandler(HTTPException)
+def handle_exception(e):
+    return jsonify({"error": e.description}), e.code
+
+
+# Локальный фронтенд
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/quotes", methods=["GET"])
+def get_quotes():
+    quotes = Quote.query.all()
+    return jsonify([q.to_dict() for q in quotes])
+
+
+@app.route("/quotes/<int:id>", methods=["GET"])
 def get_quote(id):
-    # Использовал DISTINCT для исключения возможных ошибок в bd с повторами
-    select_quotes = f"SELECT DISTINCT * from quotes WHERE id={id}"
-    cursor = get_db().cursor()
-    cursor.execute(select_quotes)
-    quote_in_db = cursor.fetchone()
-    if not quote_in_db:
-        return {"error": f"Цитата № {id} не найдена"}, 404 # Возвращаем ошибку 404
-    keys = ["id", "author", "text", "rating"]
-    quote = dict(zip(keys, quote_in_db))
-    return jsonify(quote), 200
+    quote = Quote.query.get_or_404()
+    return jsonify(quote.to_dict())
 
 
-@app.route("/quotes/count")
+@app.route("/quotes/count", methods=["GET"])
 def quotes_count():
-    try:
-        cursor = get_db().cursor()
-        quiry = "SELECT * FROM quotes"
-        cursor.execute(quiry)
-        num_quotes = len(cursor.fetchall())
-        return jsonify({'message': f'Количество цитат в базе данных = {num_quotes}'}), 200
-    except Exception as e:
-        return jsonify({'error': 'Ошибка при подсчете количества цитат в базе данных: {e}'}), 404
+    count = Quote.query.count()
+    return jsonify({"count": count})
 
 
-@app.route("/quotes/random")
+@app.route("/quotes/random", methods=["GET"])
 def random_quote():
-    try:
-        cursor = get_db().cursor()
-        quiry = "SELECT * FROM quotes"
-        cursor.execute(quiry)
-        quotes = cursor.fetchall()
-        return jsonify({'message': f'Случайная цитата: {random.choice(quotes)}'}), 200
-    except Exception as e:
-        return jsonify({'error': 'Ошибка при выборе случайной цитаты: {e}'}), 404
+    quotes = Quote.query.all()
+    if not quotes:
+        return jsonify({"error": "Нет цитат"}), 404
+    return jsonify(random.choice(quotes).to_dict())
 
 
-# URL: /quotes
-@app.route("/quotes")
-def get_quotes() -> list[dict[str, Any]]:
-    select_quotes = "SELECT * from quotes"
-    cursor = get_db().cursor()
-    cursor.execute(select_quotes)
-    quotes_db = cursor.fetchall()
-    keys = ["id", "author", "text", "rating"]
-    quotes = []
-    for quote_bd in quotes_db:
-        quote = dict(zip(keys, quote_bd))
-        quotes.append(quote)
-    return jsonify(quotes), 200
-
-
-@app.route("/quotes", methods=['POST'])
+@app.route("/quotes", methods=["POST"])
 def create_quote():
-    data = request.json
+    data = request.get_json()
     if not data or "author" not in data or "text" not in data:
-        return {"error": "Требуются поля 'author' и 'text'"}, 400
+        return jsonify({"error": "Требуются поля 'author' и 'text'"}), 400
 
-    rating = check_rating(data.get("rating"), is_new=True)
+    rating = check_rating(data.get("rating"), is_new=True) or 1
+    new_quote = Quote(author=data["author"], text=data["text"], rating=rating)
 
-    connection = get_db()
-    cursor = connection.cursor()
-
+    db.session.add(new_quote)
     try:
-        query = "INSERT INTO quotes (author, text, rating) VALUES (?, ?, ?)"
-        cursor.execute(query, (data['author'], data['text'], rating))
-        last_id = cursor.lastrowid
-        connection.commit()
-        return jsonify({'message': f'Цитата добавлена с id={last_id}'}), 201
-
+        db.session.commit()
+        return jsonify(new_quote.to_dict()), 201
     except Exception as e:
-        return jsonify({'error': f'Ошибка при записи: {e}'}), 500
+        db.session.rollback()
+        return jsonify({"error": "Ошибка при сохранении в БД"}), 500
 
 
-@app.route("/quotes/<int:id>", methods=['DELETE'])
-def del_quote(id):
-    connection = get_db()
-    cursor = connection.cursor()
-    try:
-        cursor.execute("DELETE FROM quotes WHERE id = ?", (id,))
-        if cursor.rowcount == 0:
-            return jsonify({'error': f'Цитата с id={id} не найдена'}), 404
-        connection.commit()
-        return jsonify({'message': 'Цитата успешно удалена из базы данных'}), 200
-    except sqlite3.Error as e:
-        return jsonify({'error': f'Ошибка базы данных: {str(e)}'}), 500
-    except Exception as e:
-        return jsonify({'error': f'Внутренняя ошибка сервера: {str(e)}'}), 500
-
-
-@app.route("/quotes/<int:id>", methods=['PUT'])
+@app.route("/quotes/<int:id>", methods=["PUT"])
 def edit_quote(id):
-    new_data = request.get_json()
-    if not new_data:
-        return {"error": "Отсутствуют данные"}, 400
+    quote = Quote.query.get_or_404(id)
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Отсутствуют данные"}), 400
 
-    connection = get_db()
-    cursor = connection.cursor()
+    updated = False
+    if "author" in data:
+        quote.author = str(data["author"]).strip()
+        updated = True
+    if "text" in data:
+        quote.text = str(data["text"]).strip()
+        updated = True
+    if "rating" in data:
+        validated = check_rating(data["rating"], is_new=False)
+        if validated is not None:
+            quote.rating = validated
+            updated = True
+
+    if not updated:
+        return jsonify({"error": "Нет валидных полей для обновления"}), 400
 
     try:
-        # Проверяем, существует ли цитата
-        cursor.execute("SELECT rating FROM quotes WHERE id = ?", (id,))
-        row = cursor.fetchone()
-        if row is None:
-            return jsonify({"error": f"Цитата с id={id} не найдена"}), 404
-        current_rating = row[0]
-        # Формируем данные для обновления
-        update_fields = {}
-        if "author" in new_data:
-            update_fields["author"] = new_data["author"]
-        if "text" in new_data:
-            update_fields["text"] = new_data["text"]
-        if "rating" in new_data:
-            validated_rating = check_rating(new_data["rating"], is_new=False)
-            if validated_rating is not None:
-                update_fields["rating"] = validated_rating
-        if not update_fields:
-            return jsonify({"error": "Нет валидных полей для обновления"}), 400
-        set_clause = ", ".join([f"{field} = ?" for field in update_fields])
-        query = f"UPDATE quotes SET {set_clause} WHERE id = ?"
-        values = list(update_fields.values()) + [id]
-        cursor.execute(query, values)
-        connection.commit()
-        return jsonify({"message": f"Цитата с id={id} обновлена"}), 200
-    except sqlite3.Error as e:
-        return jsonify({"error": f"Ошибка БД: {e}"}), 500
+        db.session.commit()
+        return jsonify(quote.to_dict())
     except Exception as e:
-        return jsonify({"error": f"Ошибка: {e}"}), 500
+        db.session.rollback()
+        return jsonify({"error": "Ошибка при обновлении"}), 500
 
 
-@app.route("/quotes/filters")
+@app.route("/quotes/<int:id>", methods=["DELETE"])
+def del_quote(id):
+    quote = Quote.query.get_or_404(id)
+    db.session.delete(quote)
+    try:
+        db.session.commit()
+        return jsonify({"message": "Цитата удалена"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Ошибка при удалении"}), 500
+
+
+@app.route("/quotes/filters", methods=["GET"])
 def filter_quotes():
+    query = Quote.query
 
-    keys = ["id", "author", "rating", "text"] # Список разрешенных для фильтра параметров
+    if "id" in request.args:
+        try:
+            query = query.filter(Quote.id == int(request.args["id"]))
+        except:
+            return jsonify({"error": "Параметр 'id' должен быть целым числом"}), 400
 
-    get_params = request.get_json()
+    if "author" in request.args:
+        query = query.filter(Quote.author == request.args["author"])
 
-    filters = {}
+    if "text" in request.args:
+        query = query.filter(Quote.text == request.args["text"])
 
-    for k in keys:
+    if "rating" in request.args:
+        try:
+            rating = int(request.args["rating"])
+            if 1 <= rating <= 5:
+                query = query.filter(Quote.rating == rating)
+            else:
+                return jsonify({"error": "Рейтинг должен быть от 1 до 5"}), 400
+        except:
+            return jsonify({"error": "Параметр 'rating' должен быть целым числом"}), 400
 
-        match k:
-            case "id":
-                if get_params.get(k) is not None:
-                    try:
-                        filters["id"] = int(get_params.get(k))
-                    except:
-                        return jsonify({"error": "Параметр 'id' должен быть целым числом"}), 400
-            case "author":
-                if get_params.get(k) is not None:
-                    filters["author"] = get_params.get(k)
-            case "rating":
-                if get_params.get(k) is not None:
-                    try:
-                        rating = int(get_params.get(k))
-                        if 1 <= rating <= 5:
-                            filters["rating"] = rating
-                        else:
-                            return jsonify({"error": "Параметр 'rating' должен быть от 1 до 5"}), 400
-                    except:
-                        return jsonify({"error": "Параметр 'rating' должен быть целым числом"}), 400
-            case "text":
-                if get_params.get(k) is not None:
-                    filters["text"] = get_params.get(k)
+    results = query.all()
+    if not results:
+        return jsonify({
+            "message": "Цитаты по заданным критериям не найдены",
+            "filters_applied": {k: v for k, v in request.args.items()}
+        }), 200
+
+    return jsonify([q.to_dict() for q in results])
 
 
-    if not filters:
-        return jsonify({"error": "Укажите хотя бы один фильтр: id, author, rating или text"}), 400
-
-    try:
-        connection = get_db()
-        cursor = connection.cursor()
-        keys_quiry = []
-        values = []
-        for field, value in filters.items():
-            keys_quiry.append(f"{field} = ?")
-            values.append(value)
-        query = f"SELECT * FROM quotes WHERE {' AND '.join(keys_quiry)}"
-
-        cursor.execute(query, values)
-        result = cursor.fetchall()
-
-        if not result:
-            return jsonify({
-                "message": "Нет цитат, соответствующих заданным критериям",
-                "filters": {k: v for k, v in request.args.items()}
-            }), 200
-        
-        quotes = [dict(zip(keys, row)) for row in result]
-        return jsonify(quotes), 200
-    except Exception as e:
-        return jsonify({"error": f"Ошибка при работе с базой данных: {e}"}), 500
+with app.app_context():
+    db.create_all()
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True) # Это для запуска с фронтендом у себя же.
