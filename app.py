@@ -93,25 +93,25 @@ def index():
 
 @app.route("/quotes", methods=["GET"])
 def get_quotes():
-    quotes = Quote.query.all()
+    quotes = QuoteModel.query.all()
     return jsonify([q.to_dict() for q in quotes])
 
 
 @app.route("/quotes/<int:id>", methods=["GET"])
 def get_quote(id):
-    quote = Quote.query.get_or_404()
+    quote = QuoteModel.query.get_or_404()
     return jsonify(quote.to_dict())
 
 
 @app.route("/quotes/count", methods=["GET"])
 def quotes_count():
-    count = Quote.query.count()
+    count = QuoteModel.query.count()
     return jsonify({"count": count})
 
 
 @app.route("/quotes/random", methods=["GET"])
 def random_quote():
-    quotes = Quote.query.all()
+    quotes = QuoteModel.query.all()
     if not quotes:
         return jsonify({"error": "Нет цитат"}), 404
     return jsonify(random.choice(quotes).to_dict())
@@ -124,7 +124,7 @@ def create_quote():
         return jsonify({"error": "Требуются поля 'author' и 'text'"}), 400
 
     rating = check_rating(data.get("rating"), is_new=True) or 1
-    new_quote = Quote(author=data["author"], text=data["text"], rating=rating)
+    new_quote = QuoteModel(author=data["author"], text=data["text"], rating=rating)
 
     db.session.add(new_quote)
     try:
@@ -137,7 +137,7 @@ def create_quote():
 
 @app.route("/quotes/<int:id>", methods=["PUT"])
 def edit_quote(id):
-    quote = Quote.query.get_or_404(id)
+    quote = QuoteModel.query.get_or_404(id)
     data = request.get_json()
     if not data:
         return jsonify({"error": "Отсутствуют данные"}), 400
@@ -168,7 +168,7 @@ def edit_quote(id):
 
 @app.route("/quotes/<int:id>", methods=["DELETE"])
 def del_quote(id):
-    quote = Quote.query.get_or_404(id)
+    quote = QuoteModel.query.get_or_404(id)
     db.session.delete(quote)
     try:
         db.session.commit()
@@ -180,25 +180,25 @@ def del_quote(id):
 
 @app.route("/quotes/filters", methods=["GET"])
 def filter_quotes():
-    query = Quote.query
+    query = QuoteModel.query
 
     if "id" in request.args:
         try:
-            query = query.filter(Quote.id == int(request.args["id"]))
+            query = query.filter(QuoteModel.id == int(request.args["id"]))
         except:
             return jsonify({"error": "Параметр 'id' должен быть целым числом"}), 400
 
     if "author" in request.args:
-        query = query.filter(Quote.author == request.args["author"])
+        query = query.filter(QuoteModel.author == request.args["author"])
 
     if "text" in request.args:
-        query = query.filter(Quote.text == request.args["text"])
+        query = query.filter(QuoteModel.text == request.args["text"])
 
     if "rating" in request.args:
         try:
             rating = int(request.args["rating"])
             if 1 <= rating <= 5:
-                query = query.filter(Quote.rating == rating)
+                query = query.filter(QuoteModel.rating == rating)
             else:
                 return jsonify({"error": "Рейтинг должен быть от 1 до 5"}), 400
         except:
