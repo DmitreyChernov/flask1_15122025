@@ -11,3 +11,4 @@ lib/
 bin/
 *.cfg
 flask_venv/
+deploy_script

@@ -22,6 +22,7 @@ app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / DB_NAME}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.json.ensure_ascii = False
 
 
 db = SQLAlchemy(model_class=Base)
@@ -249,7 +250,7 @@ def filter_quotes():
             "filters_applied": filters_applied
         }), 200
 
-    return jsonify([q.to_dict() for q in results])
+    return jsonify([q.to_dict() for q in results]), 200
 
 
 migrate = Migrate(app, db)
